@@ -12,12 +12,14 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.action.ActionParameters
+import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.background
@@ -34,10 +36,13 @@ import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.width
+import androidx.glance.appwidget.lazy.LazyColumn
+import androidx.glance.appwidget.lazy.items
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
+import com.chomey.weekme.config.MonthPickerActivity
 import com.chomey.weekme.data.CalendarEvent
 import com.chomey.weekme.data.CalendarRepository
 import java.time.DayOfWeek
@@ -106,6 +111,21 @@ class TodayAction : ActionCallback {
             prefs[WeekOffsetKey] = 0
         }
         WeekMeWidget().update(context, glanceId)
+    }
+}
+
+val WeekOffsetParam = ActionParameters.Key<Int>("week_offset_param")
+
+class OpenMonthPickerAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
+        val weekOffset = parameters[WeekOffsetParam] ?: 0
+        val intent = Intent(context, MonthPickerActivity::class.java).apply {
+            putExtra("EXTRA_WIDGET_ID", appWidgetId)
+            putExtra("EXTRA_WEEK_OFFSET", weekOffset)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(intent)
     }
 }
 
@@ -197,14 +217,15 @@ private fun NavBar(
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()
-            .height(24.dp),
+            .height(48.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Previous week button
         Box(
             modifier = GlanceModifier
-                .width(32.dp)
+                .width(48.dp)
                 .fillMaxHeight()
+                .cornerRadius(8.dp)
                 .background(ColorProvider(day = NavBgLight, night = NavBgDark))
                 .clickable(actionRunCallback<PrevWeekAction>()),
             contentAlignment = Alignment.Center,
@@ -213,25 +234,52 @@ private fun NavBar(
                 text = "<",
                 style = TextStyle(
                     color = GlanceTheme.colors.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                 ),
             )
         }
 
-        // Week label (tap to go back to today)
+        Spacer(modifier = GlanceModifier.width(2.dp))
+
+        // Today button
+        Box(
+            modifier = GlanceModifier
+                .width(48.dp)
+                .fillMaxHeight()
+                .cornerRadius(8.dp)
+                .background(ColorProvider(day = Blue, night = LightBlue))
+                .clickable(actionRunCallback<TodayAction>()),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "TODAY",
+                style = TextStyle(
+                    color = ColorProvider(day = Color.White, night = Color.Black),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+            )
+        }
+
+        Spacer(modifier = GlanceModifier.width(2.dp))
+
+        // Week label (tap to open month picker)
         Box(
             modifier = GlanceModifier
                 .defaultWeight()
                 .fillMaxHeight()
+                .cornerRadius(8.dp)
+                .background(ColorProvider(day = CellBgLight, night = CellBgDark))
                 .clickable(
-                    if (weekOffset != 0) actionRunCallback<TodayAction>()
-                    else actionRunCallback<TodayAction>()
+                    actionRunCallback<OpenMonthPickerAction>(
+                        actionParametersOf(WeekOffsetParam to weekOffset)
+                    )
                 ),
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = if (weekOffset == 0) label else "$label ↩",
+                text = "$label ▼",
                 style = TextStyle(
                     color = if (weekOffset == 0) GlanceTheme.colors.onSurface
                         else ColorProvider(day = Blue, night = LightBlue),
@@ -242,11 +290,14 @@ private fun NavBar(
             )
         }
 
+        Spacer(modifier = GlanceModifier.width(2.dp))
+
         // Next week button
         Box(
             modifier = GlanceModifier
-                .width(32.dp)
+                .width(48.dp)
                 .fillMaxHeight()
+                .cornerRadius(8.dp)
                 .background(ColorProvider(day = NavBgLight, night = NavBgDark))
                 .clickable(actionRunCallback<NextWeekAction>()),
             contentAlignment = Alignment.Center,
@@ -255,7 +306,7 @@ private fun NavBar(
                 text = ">",
                 style = TextStyle(
                     color = GlanceTheme.colors.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                 ),
             )
@@ -300,33 +351,52 @@ private fun DayCell(
         val dayName = date.dayOfWeek.getDisplayName(DateTextStyle.SHORT, Locale.getDefault())
         val dayNum = date.dayOfMonth.toString()
 
-        Text(
-            text = "$dayNum $dayName",
-            style = TextStyle(
-                color = headerColor,
-                fontSize = 12.sp,
-                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-            ),
-        )
+        Row(
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "$dayNum $dayName",
+                style = TextStyle(
+                    color = headerColor,
+                    fontSize = 12.sp,
+                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                ),
+            )
+            if (events.size > 3) {
+                Text(
+                    text = " (${events.size})",
+                    style = TextStyle(
+                        color = ColorProvider(day = DimLight, night = DimDark),
+                        fontSize = 9.sp,
+                    ),
+                )
+            }
+        }
 
         Spacer(modifier = GlanceModifier.height(2.dp))
 
-        val maxEvents = 4
-        val displayEvents = events.take(maxEvents)
-
-        for (event in displayEvents) {
-            EventRow(event)
-            Spacer(modifier = GlanceModifier.height(1.dp))
-        }
-
-        if (events.size > maxEvents) {
-            Text(
-                text = "+${events.size - maxEvents} more",
-                style = TextStyle(
-                    color = GlanceTheme.colors.onSurface,
-                    fontSize = 9.sp,
-                ),
-            )
+        LazyColumn(
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .defaultWeight(),
+        ) {
+            items(events, itemId = { it.id }) { event ->
+                EventRow(event)
+            }
+            if (events.size > 3) {
+                item {
+                    Text(
+                        text = "▼",
+                        style = TextStyle(
+                            color = ColorProvider(day = DimLight, night = DimDark),
+                            fontSize = 8.sp,
+                            textAlign = TextAlign.Center,
+                        ),
+                        modifier = GlanceModifier.fillMaxWidth(),
+                    )
+                }
+            }
         }
     }
 }

@@ -20,6 +20,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".config.MonthPickerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.WeekMe" />
+
         <receiver
             android:name=".widget.WeekMeWidgetReceiver"
             android:exported="true"
